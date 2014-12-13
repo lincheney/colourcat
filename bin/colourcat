@@ -1,6 +1,7 @@
 from __future__ import print_function
 
 import sys
+import os
 import argparse
 import errno
 import functools
@@ -11,21 +12,31 @@ print = functools.partial(print, sep='')
 
 import magic
 import pygments
-from pygments import lexers, formatters, console
+from pygments import lexers, formatters
+from pygments.console import codes, esc
 
 # default formatter and lexer
 default_formatter = formatters.TerminalFormatter()
 #default_lexer = lexers.TextLexer()
+DARKBG = default_formatter.darkbg
 
 # styles
-filename_style = console.codes['yellow'] + console.codes['underline']
-number_style = console.codes['standout'] #italics
-error_style = console.codes['red']
-binary_style = console.codes['brown']
-whitespace_style = console.esc+'48;5;235m'
-reset_style = console.codes['reset']
+number_style = codes['standout'] #italics
+error_style = codes['red']
+binary_style = codes['brown']
+whitespace_style = esc+('48;5;235m', '48;5;255m')[DARKBG]
+reset_style = codes['reset']
 
-filename_format = '{}==>  {{}}  <=={}'.format(filename_style, reset_style)
+filename_header_style = (esc+'48;5;237m', codes['black'] + esc+'48;5;253m')[DARKBG]
+dirname_style = filename_header_style
+basename_style = codes['bold'] + ('', codes['black'])[DARKBG]
+
+filename_format = '{h}==> {r}{d}{{}}{r}{b}{{}}{r}{h} <=={r}'.format(
+    h=filename_header_style,
+    d=dirname_style,
+    b=basename_style,
+    r=reset_style,
+)
 
 class BinaryFileException(Exception):
     def __init__(self, text):
@@ -33,7 +44,7 @@ class BinaryFileException(Exception):
 
 encoding_detector = magic.Magic(mime_encoding=True)
 def is_binary(blob):
-    return blob and (encoding_detector.from_buffer(blob) == 'binary')
+    return blob and (encoding_detector.from_buffer(blob) == b'binary')
 
 
 def try_lexer(function, *args, **kwargs):
@@ -48,6 +59,7 @@ def highlight_file(filename):
     if is_binary(text):
         raise BinaryFileException(text)
 
+    text = text.decode('utf-8')
     lexer = try_lexer(lexers.get_lexer_for_filename, filename)
     lexer = lexer or try_lexer(lexers.guess_lexer, text[:1024])
 
@@ -75,7 +87,7 @@ def print_buffer(buffer, number_lines, highlight_ws, **kwargs):
         buffer = buffer.splitlines()
         if number_lines:
             columns = max(len(str(len(buffer))), 6)
-            number_format = '{}{{:>{}}}{}'.format(number_style, columns, reset_style)
+            number_format = '{}{{:>{}}}{}|'.format(number_style, columns, reset_style)
 
         for lineno, line in enumerate(buffer, 1):
             if line.endswith(reset_style):
@@ -93,11 +105,11 @@ def print_buffer(buffer, number_lines, highlight_ws, **kwargs):
         raise
 
 
-def main(files, **kwargs):
+def main(files, filename_header, **kwargs):
     if not files:
         files.append('-')
 
-    multiple = len(files) > 1
+    filename_header = filename_header or len(files) > 1
     for i, filename in enumerate(files):
         if i != 0:
             print()
@@ -107,8 +119,11 @@ def main(files, **kwargs):
         else:
             printed_filename = filename
 
-        if multiple:
-            print(filename_format.format(printed_filename))
+        if filename_header:
+            dirname, basename = os.path.split(printed_filename)
+            if dirname:
+                dirname += os.sep
+            print(filename_format.format(dirname, basename))
 
         try:
             if filename == '-':
@@ -129,6 +144,7 @@ parser = argparse.ArgumentParser(description="Coloured cat")
 parser.add_argument('-n', action='store_true', help='number lines of output', dest='number_lines')
 parser.add_argument('-b', action='store_true', help='force dump binary files', dest='output_binary')
 parser.add_argument('-s', action='store_true', help='highlight trailing whitespace', dest='highlight_ws')
+parser.add_argument('--header', action='store_true', help='always print filename header', dest='filename_header')
 parser.add_argument('files', nargs='*')
 
 args = parser.parse_args()
