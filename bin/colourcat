@@ -4,6 +4,7 @@ import sys
 import argparse
 import errno
 import functools
+import re
 
 # set default separator
 print = functools.partial(print, sep='')
@@ -21,9 +22,10 @@ filename_style = console.codes['yellow'] + console.codes['underline']
 number_style = console.codes['standout'] #italics
 error_style = console.codes['red']
 binary_style = console.codes['brown']
+whitespace_style = console.esc+'48;5;235m'
 reset_style = console.codes['reset']
 
-filename_format = '{}==> {{}} <=={}'.format(filename_style, reset_style)
+filename_format = '{}==>  {{}}  <=={}'.format(filename_style, reset_style)
 
 class BinaryFileException(Exception):
     def __init__(self, text):
@@ -31,7 +33,7 @@ class BinaryFileException(Exception):
 
 encoding_detector = magic.Magic(mime_encoding=True)
 def is_binary(blob):
-    return (encoding_detector.from_buffer(blob) == 'binary')
+    return blob and (encoding_detector.from_buffer(blob) == 'binary')
 
 
 def try_lexer(function, *args, **kwargs):
@@ -58,26 +60,33 @@ def highlight_text(text):
     return highlight(text, lexer, default_formatter, **kwargs)
 
 def highlight_stdin():
-    text = sys.stdin.read()
-    if is_binary(text):
-        raise BinaryFileException(text)
-    return highlight_text(text)
+    return highlight_text(sys.stdin.read())
 
 #def highlight(text, lexer, formatter):
 #    return pygments.highlight(text, lexer, formatter)
 highlight = pygments.highlight
 
-def print_buffer(buffer, number_lines):
+def print_buffer(buffer, number_lines, highlight_ws, **kwargs):
     try:
+        if not number_lines and not highlight_ws:
+            print(buffer)
+            return
+
+        buffer = buffer.splitlines()
         if number_lines:
-            buffer = buffer.splitlines()
             columns = max(len(str(len(buffer))), 6)
             number_format = '{}{{:>{}}}{}'.format(number_style, columns, reset_style)
-            for lineno, line in enumerate(buffer, 1):
-                print(number_format.format(lineno), '\t', line)
 
-        else:
-            print(buffer)
+        for lineno, line in enumerate(buffer, 1):
+            if line.endswith(reset_style):
+                line = line[:-len(reset_style)]
+
+            if number_lines:
+                print(number_format.format(lineno), '\t', end='')
+            if highlight_ws:
+                line = re.sub(r'(\s*)$', whitespace_style + r'\1', line)
+
+            print(line, reset_style)
     except IOError as e:
         if e.errno == errno.EPIPE:
             sys.exit()
@@ -89,7 +98,10 @@ def main(files, **kwargs):
         files.append('-')
 
     multiple = len(files) > 1
-    for filename in files:
+    for i, filename in enumerate(files):
+        if i != 0:
+            print()
+
         if filename == '-':
             printed_filename = 'standard input'
         else:
@@ -107,15 +119,16 @@ def main(files, **kwargs):
             print(error_style, e, reset_style)
         except BinaryFileException as e:
             if kwargs['output_binary']:
-                print_buffer(e.text, number_lines=False)
+                print_buffer(e.text, number_lines=False, highlight_ws=False)
             else:
                 print(binary_style, '[{} is a binary file]'.format(printed_filename), reset_style)
         else:
-            print_buffer(highlighted, number_lines=kwargs['number_lines'])
+            print_buffer(highlighted, **kwargs)
 
 parser = argparse.ArgumentParser(description="Coloured cat")
 parser.add_argument('-n', action='store_true', help='number lines of output', dest='number_lines')
 parser.add_argument('-b', action='store_true', help='force dump binary files', dest='output_binary')
+parser.add_argument('-s', action='store_true', help='highlight trailing whitespace', dest='highlight_ws')
 parser.add_argument('files', nargs='*')
 
 args = parser.parse_args()
