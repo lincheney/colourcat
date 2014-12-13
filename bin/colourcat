@@ -5,6 +5,7 @@ import os
 import argparse
 import errno
 import functools
+import itertools
 import re
 
 # set default separator
@@ -53,7 +54,7 @@ def try_lexer(function, *args, **kwargs):
     except pygments.util.ClassNotFound:
         return None
 
-def highlight_file(lexer, filename):
+def get_lexer_from_file(lexer, filename):
     with open(filename, 'rb') as f:
         text = f.read()
     if is_binary(text):
@@ -63,46 +64,59 @@ def highlight_file(lexer, filename):
     lexer = lexer or try_lexer(lexers.get_lexer_for_filename, filename)
     lexer = lexer or try_lexer(lexers.guess_lexer, text[:1024])
 
-    return highlight(text, lexer, default_formatter)
+    return lexer, text
 
-def highlight_text(lexer, text):
+def get_lexer_from_text(lexer, text):
     if is_binary(text):
         raise BinaryFileException(text)
     lexer = lexer or try_lexer(lexers.guess_lexer, text[:1024])
-    return highlight(text, lexer, default_formatter)
+    return lexer, text
 
-def highlight_stdin(lexer):
-    return highlight_text(lexer, sys.stdin.read())
+def get_lexer_from_stdin(lexer):
+    return get_lexer_from_text(lexer, sys.stdin.read())
 
-#def highlight(text, lexer, formatter):
-#    return pygments.highlight(text, lexer, formatter)
-highlight = pygments.highlight
-
-def print_buffer(buffer, number_lines, highlight_ws, **kwargs):
+def print_buffer(buffer):
     try:
-        if not number_lines and not highlight_ws:
-            print(buffer)
-            return
+        print(buffer)
+    except IOError as e:
+        if e.errno == errno.EPIPE:
+            sys.exit()
+        raise
 
-        buffer = buffer.splitlines()
-        if number_lines:
-            columns = max(len(str(len(buffer))), 6)
-            number_format = '{}{{:>{}}}{}|'.format(number_style, columns, reset_style)
+def print_highlighted(text, lexer, number_lines, highlight_ws, **kwargs):
+    tokens = pygments.lex(text, lexer)
+    blank_line = '\n'
 
-        for lineno, line in enumerate(buffer, 1):
+    if number_lines:
+        lineno = 1
+        columns = max(len(str(text.count('\n'))) + 1, 6)
+        number_format = '{}{{:>{}}}{}|'.format(number_style, columns, reset_style)
+        blank_line = number_format + '\n'
+
+    try:
+        for newline, g in itertools.groupby(tokens, lambda x: x[1] == '\n'):
+            if newline:
+                lines = len(list(g))
+                if number_lines:
+                    print(''.join(blank_line.format(i) for i in range(lineno+1, lineno+lines)), end='')
+                    lineno += lines
+                else:
+                    print(blank_line*(lines-1), end='')
+                continue
+
+            line = pygments.format(g, default_formatter)
             if line.endswith(reset_style):
                 line = line[:-len(reset_style)]
-
             if number_lines:
                 print(number_format.format(lineno), '\t', end='')
             if highlight_ws:
                 line = re.sub(r'(\s*)$', whitespace_style + r'\1', line)
-
             print(line, reset_style)
     except IOError as e:
         if e.errno == errno.EPIPE:
             sys.exit()
         raise
+
 
 
 def main(files, filename_header, lexer, **kwargs):
@@ -130,9 +144,9 @@ def main(files, filename_header, lexer, **kwargs):
 
         try:
             if filename == '-':
-                highlighted = highlight_stdin(lexer)
+                lexer, text = get_lexer_from_stdin(lexer)
             else:
-                highlighted = highlight_file(lexer, filename)
+                lexer, text = get_lexer_from_file(lexer, filename)
         except (IOError, OSError) as e:
             print(error_style, e, reset_style)
         except BinaryFileException as e:
@@ -141,7 +155,7 @@ def main(files, filename_header, lexer, **kwargs):
             else:
                 print(binary_style, '[{} is a binary file]'.format(printed_filename), reset_style)
         else:
-            print_buffer(highlighted, **kwargs)
+            print_highlighted(text, lexer, **kwargs)
 
 parser = argparse.ArgumentParser(description="Coloured cat")
 parser.add_argument('-n', action='store_true', help='number lines of output', dest='number_lines')
