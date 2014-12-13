@@ -69,7 +69,7 @@ def highlight_text(text):
     if is_binary(text):
         raise BinaryFileException(text)
     lexer = try_lexer(lexers.guess_lexer, text[:1024])
-    return highlight(text, lexer, default_formatter, **kwargs)
+    return highlight(text, lexer, default_formatter)
 
 def highlight_stdin():
     return highlight_text(sys.stdin.read())
