@@ -65,11 +65,17 @@ parser.add_argument('files', nargs='*')
 
 args = parser.parse_args()
 kwargs = vars(args)
+multiple = len(args.files) > 1
 
 for filename in args.files:
     if filename == '-':
+        if multiple:
+            print('{}==> standard input <=={}'.format(filename_style, reset_style))
         highlight_stdin(**kwargs)
         continue
+
+    if multiple:
+        print('{}==> {} <=={}'.format(filename_style, filename, reset_style))
 
     try:
         highlight_file(filename, **kwargs)
