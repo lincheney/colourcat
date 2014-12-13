@@ -2,6 +2,7 @@ from __future__ import print_function
 
 import sys
 import argparse
+import errno
 
 import pygments
 from pygments import lexers, formatters, console
@@ -16,6 +17,7 @@ number_style = console.codes['standout'] #italics
 error_style = console.codes['red']
 reset_style = console.codes['reset']
 
+filename_format = '{}==> {{}} <=={}'.format(filename_style, reset_style)
 
 def try_lexer(function, *args, **kwargs):
     try:
@@ -31,30 +33,19 @@ def highlight_file(filename, **kwargs):
     lexer = lexer or try_lexer(lexers.guess_lexer, text)
     lexer = lexer or default_lexer
 
-    highlight(text, lexer, default_formatter, **kwargs)
+    return highlight(text, lexer, default_formatter, **kwargs)
 
 def highlight_text(text, **kwargs):
     lexer = try_lexer(lexers.guess_lexer, text)
     lexer = lexer or default_lexer
 
-    highlight(text, lexer, default_formatter, **kwargs)
-
+    return highlight(text, lexer, default_formatter, **kwargs)
 
 def highlight_stdin(**kwargs):
-    highlight_text(sys.stdin.read(), **kwargs)
+    return highlight_text(sys.stdin.read(), **kwargs)
 
 def highlight(text, lexer, formatter, **kwargs):
-    highlighted = pygments.highlight(text, lexer, formatter)
-
-    if kwargs['number_lines']:
-        highlighted = highlighted.splitlines()
-        columns = max(len(str(len(highlighted))), 6)
-        number_format = '{}{{:>{}}}{}'.format(number_style, columns, reset_style)
-        for lineno, line in enumerate(highlighted, 1):
-            print(number_format.format(lineno), '\t', line)
-
-    else:
-        print(highlighted)
+    return pygments.highlight(text, lexer, formatter)
 
 
 ## main
@@ -70,17 +61,33 @@ multiple = len(args.files) > 1
 for filename in args.files:
     if filename == '-':
         if multiple:
-            print('{}==> standard input <=={}'.format(filename_style, reset_style))
+            print(filename_format.format('standard input'))
         highlight_stdin(**kwargs)
         continue
 
     if multiple:
-        print('{}==> {} <=={}'.format(filename_style, filename, reset_style))
+        print(filename_format.format(filename))
 
     try:
-        highlight_file(filename, **kwargs)
+        highlighted = highlight_file(filename, **kwargs)
     except (IOError, OSError) as e:
         print(error_style, e, reset_style)
+        continue
+
+    try:
+        if args.number_lines:
+            highlighted = highlighted.splitlines()
+            columns = max(len(str(len(highlighted))), 6)
+            number_format = '{}{{:>{}}}{}'.format(number_style, columns, reset_style)
+            for lineno, line in enumerate(highlighted, 1):
+                print(number_format.format(lineno), '\t', line)
+
+        else:
+            print(highlighted)
+    except IOError as e:
+        if e.errno == errno.EPIPE:
+            break
+        raise
 
 if not args.files:
     highlight_stdin(**kwargs)
