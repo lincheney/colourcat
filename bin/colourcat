@@ -12,7 +12,7 @@ default_lexer = lexers.TextLexer()
 
 # styles
 filename_style = console.codes['yellow'] + console.codes['underline']
-number_style = console.codes['standout']
+number_style = console.codes['standout'] #italics
 error_style = console.codes['red']
 reset_style = console.codes['reset']
 
@@ -23,7 +23,7 @@ def try_lexer(function, *args, **kwargs):
     except pygments.util.ClassNotFound:
         return None
 
-def highlight_file(filename):
+def highlight_file(filename, **kwargs):
     with open(filename) as f:
         text = f.read()
 
@@ -31,23 +31,33 @@ def highlight_file(filename):
     lexer = lexer or try_lexer(lexers.guess_lexer, text)
     lexer = lexer or default_lexer
 
-    highlight(text, lexer, default_formatter)
+    highlight(text, lexer, default_formatter, **kwargs)
 
-def highlight(text, lexer, formatter):
+def highlight(text, lexer, formatter, **kwargs):
     highlighted = pygments.highlight(text, lexer, formatter)
-    print(highlighted)
+
+    if kwargs['number_lines']:
+        highlighted = highlighted.splitlines()
+        columns = max(len(str(len(highlighted))), 6)
+        number_format = '{}{{:>{}}}{}'.format(number_style, columns, reset_style)
+        for lineno, line in enumerate(highlighted, 1):
+            print(number_format.format(lineno), '\t', line)
+
+    else:
+        print(highlighted)
 
 
 ## main
 
-parser = argparse.ArgumentParser(description = "Coloured cat")
+parser = argparse.ArgumentParser(description="Coloured cat")
+parser.add_argument('-n', action='store_true', help='number lines of output', dest='number_lines')
 parser.add_argument('files', nargs='*')
 
 args = parser.parse_args()
 
 for filename in args.files:
     try:
-        highlight_file(filename)
+        highlight_file(filename, **vars(args))
     except (IOError, OSError) as e:
         print(error_style, e, reset_style)
 
