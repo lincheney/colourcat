@@ -9,7 +9,7 @@ from pygments import lexers, formatters, console
 
 # default formatter and lexer
 default_formatter = formatters.TerminalFormatter()
-default_lexer = lexers.TextLexer()
+#default_lexer = lexers.TextLexer()
 
 # styles
 filename_style = console.codes['yellow'] + console.codes['underline']
@@ -30,21 +30,20 @@ def highlight_file(filename, **kwargs):
         text = f.read()
 
     lexer = try_lexer(lexers.get_lexer_for_filename, filename)
-    lexer = lexer or try_lexer(lexers.guess_lexer, text)
-    lexer = lexer or default_lexer
+    lexer = lexer or try_lexer(lexers.guess_lexer, text[:1024])
 
     return highlight(text, lexer, default_formatter, **kwargs)
 
 def highlight_text(text, **kwargs):
-    lexer = try_lexer(lexers.guess_lexer, text)
-    lexer = lexer or default_lexer
-
+    lexer = try_lexer(lexers.guess_lexer, text[:1024])
     return highlight(text, lexer, default_formatter, **kwargs)
 
 def highlight_stdin(**kwargs):
     return highlight_text(sys.stdin.read(), **kwargs)
 
 def highlight(text, lexer, formatter, **kwargs):
+    if lexer is None:
+        return text
     return pygments.highlight(text, lexer, formatter)
 
 
