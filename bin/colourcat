@@ -1,6 +1,7 @@
 from __future__ import print_function
 
 import sys
+import argparse
 
 import pygments
 from pygments import lexers, formatters, console
@@ -8,6 +9,12 @@ from pygments import lexers, formatters, console
 # default formatter and lexer
 default_formatter = formatters.TerminalFormatter()
 default_lexer = lexers.TextLexer()
+
+# styles
+filename_style = console.codes['yellow'] + console.codes['underline']
+number_style = console.codes['standout']
+error_style = console.codes['red']
+reset_style = console.codes['reset']
 
 
 def try_lexer(function, *args, **kwargs):
@@ -31,12 +38,16 @@ def highlight(text, lexer, formatter):
     print(highlighted)
 
 
-filenames = sys.argv[1:]
+## main
 
-for filename in filenames:
+parser = argparse.ArgumentParser(description = "Coloured cat")
+parser.add_argument('files', nargs='*')
+
+args = parser.parse_args()
+
+for filename in args.files:
     try:
         highlight_file(filename)
     except (IOError, OSError) as e:
-        print(e)
-    print()
+        print(error_style, e, reset_style)
 
