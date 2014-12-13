@@ -9,5 +9,5 @@ setup(
     author_email = 'lincheney@gmail.com',
     packages = ['colourcat'],
     scripts = ['bin/colourcat'],
-    install_requires = ['pygments'],
+    install_requires = ['pygments', 'python-magic'],
 )

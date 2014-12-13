@@ -8,16 +8,7 @@ import functools
 # set default separator
 print = functools.partial(print, sep='')
 
-try:
-    import magic
-    magic = magic.Magic(mime_encoding=True)
-    def is_binary(blob):
-        return (magic.from_buffer(blob) == 'binary')
-
-except ImportError:
-    def is_binary(blob):
-        return False
-
+import magic
 import pygments
 from pygments import lexers, formatters, console
 
@@ -38,6 +29,10 @@ class BinaryFileException(Exception):
     def __init__(self, text):
         self.text = text
 
+encoding_detector = magic.Magic(mime_encoding=True)
+def is_binary(blob):
+    return (encoding_detector.from_buffer(blob) == 'binary')
+
 
 def try_lexer(function, *args, **kwargs):
     try:
@@ -45,26 +40,48 @@ def try_lexer(function, *args, **kwargs):
     except pygments.util.ClassNotFound:
         return None
 
-def highlight_file(filename, **kwargs):
+def highlight_file(filename):
     with open(filename, 'rb') as f:
         text = f.read()
+    if is_binary(text):
+        raise BinaryFileException(text)
 
     lexer = try_lexer(lexers.get_lexer_for_filename, filename)
     lexer = lexer or try_lexer(lexers.guess_lexer, text[:1024])
 
-    return highlight(text, lexer, default_formatter, **kwargs)
+    return highlight(text, lexer, default_formatter)
 
-def highlight_text(text, **kwargs):
+def highlight_text(text):
+    if is_binary(text):
+        raise BinaryFileException(text)
     lexer = try_lexer(lexers.guess_lexer, text[:1024])
     return highlight(text, lexer, default_formatter, **kwargs)
 
-def highlight_stdin(**kwargs):
-    return highlight_text(sys.stdin.read(), **kwargs)
-
-def highlight(text, lexer, formatter, **kwargs):
+def highlight_stdin():
+    text = sys.stdin.read()
     if is_binary(text):
         raise BinaryFileException(text)
-    return pygments.highlight(text, lexer, formatter)
+    return highlight_text(text)
+
+#def highlight(text, lexer, formatter):
+#    return pygments.highlight(text, lexer, formatter)
+highlight = pygments.highlight
+
+def print_buffer(buffer, number_lines):
+    try:
+        if number_lines:
+            buffer = buffer.splitlines()
+            columns = max(len(str(len(buffer))), 6)
+            number_format = '{}{{:>{}}}{}'.format(number_style, columns, reset_style)
+            for lineno, line in enumerate(buffer, 1):
+                print(number_format.format(lineno), '\t', line)
+
+        else:
+            print(buffer)
+    except IOError as e:
+        if e.errno == errno.EPIPE:
+            sys.exit()
+        raise
 
 
 def main(files, **kwargs):
@@ -83,33 +100,22 @@ def main(files, **kwargs):
 
         try:
             if filename == '-':
-                highlighted = highlight_stdin(**kwargs)
+                highlighted = highlight_stdin()
             else:
-                highlighted = highlight_file(filename, **kwargs)
+                highlighted = highlight_file(filename)
         except (IOError, OSError) as e:
             print(error_style, e, reset_style)
-            continue
         except BinaryFileException as e:
-            print(binary_style, '[Binary file]', reset_style)
-            continue
-
-        try:
-            if args.number_lines:
-                highlighted = highlighted.splitlines()
-                columns = max(len(str(len(highlighted))), 6)
-                number_format = '{}{{:>{}}}{}'.format(number_style, columns, reset_style)
-                for lineno, line in enumerate(highlighted, 1):
-                    print(number_format.format(lineno), '\t', line)
-
+            if kwargs['output_binary']:
+                print_buffer(e.text, number_lines=False)
             else:
-                print(highlighted)
-        except IOError as e:
-            if e.errno == errno.EPIPE:
-                break
-            raise
+                print(binary_style, '[{} is a binary file]'.format(printed_filename), reset_style)
+        else:
+            print_buffer(highlighted, number_lines=kwargs['number_lines'])
 
 parser = argparse.ArgumentParser(description="Coloured cat")
 parser.add_argument('-n', action='store_true', help='number lines of output', dest='number_lines')
+parser.add_argument('-b', action='store_true', help='force dump binary files', dest='output_binary')
 parser.add_argument('files', nargs='*')
 
 args = parser.parse_args()
