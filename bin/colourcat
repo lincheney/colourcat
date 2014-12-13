@@ -53,26 +53,26 @@ def try_lexer(function, *args, **kwargs):
     except pygments.util.ClassNotFound:
         return None
 
-def highlight_file(filename):
+def highlight_file(lexer, filename):
     with open(filename, 'rb') as f:
         text = f.read()
     if is_binary(text):
         raise BinaryFileException(text)
 
     text = text.decode('utf-8')
-    lexer = try_lexer(lexers.get_lexer_for_filename, filename)
+    lexer = lexer or try_lexer(lexers.get_lexer_for_filename, filename)
     lexer = lexer or try_lexer(lexers.guess_lexer, text[:1024])
 
     return highlight(text, lexer, default_formatter)
 
-def highlight_text(text):
+def highlight_text(lexer, text):
     if is_binary(text):
         raise BinaryFileException(text)
-    lexer = try_lexer(lexers.guess_lexer, text[:1024])
+    lexer = lexer or try_lexer(lexers.guess_lexer, text[:1024])
     return highlight(text, lexer, default_formatter)
 
-def highlight_stdin():
-    return highlight_text(sys.stdin.read())
+def highlight_stdin(lexer):
+    return highlight_text(lexer, sys.stdin.read())
 
 #def highlight(text, lexer, formatter):
 #    return pygments.highlight(text, lexer, formatter)
@@ -105,9 +105,12 @@ def print_buffer(buffer, number_lines, highlight_ws, **kwargs):
         raise
 
 
-def main(files, filename_header, **kwargs):
+def main(files, filename_header, lexer, **kwargs):
     if not files:
         files.append('-')
+
+    if lexer:
+        lexer = lexers.get_lexer_by_name(lexer)
 
     filename_header = filename_header or len(files) > 1
     for i, filename in enumerate(files):
@@ -127,9 +130,9 @@ def main(files, filename_header, **kwargs):
 
         try:
             if filename == '-':
-                highlighted = highlight_stdin()
+                highlighted = highlight_stdin(lexer)
             else:
-                highlighted = highlight_file(filename)
+                highlighted = highlight_file(lexer, filename)
         except (IOError, OSError) as e:
             print(error_style, e, reset_style)
         except BinaryFileException as e:
@@ -145,6 +148,7 @@ parser.add_argument('-n', action='store_true', help='number lines of output', de
 parser.add_argument('-b', action='store_true', help='force dump binary files', dest='output_binary')
 parser.add_argument('-s', action='store_true', help='highlight trailing whitespace', dest='highlight_ws')
 parser.add_argument('--header', action='store_true', help='always print filename header', dest='filename_header')
+parser.add_argument('-l', '--lexer', help='lexer', dest='lexer')
 parser.add_argument('files', nargs='*')
 
 args = parser.parse_args()
