@@ -33,6 +33,12 @@ def highlight_file(filename, **kwargs):
 
     highlight(text, lexer, default_formatter, **kwargs)
 
+def highlight_text(text, **kwargs):
+    lexer = try_lexer(lexers.guess_lexer, text)
+    lexer = lexer or default_lexer
+
+    highlight(text, lexer, default_formatter, **kwargs)
+
 def highlight(text, lexer, formatter, **kwargs):
     highlighted = pygments.highlight(text, lexer, formatter)
 
@@ -54,10 +60,14 @@ parser.add_argument('-n', action='store_true', help='number lines of output', de
 parser.add_argument('files', nargs='*')
 
 args = parser.parse_args()
+kwargs = vars(args)
 
 for filename in args.files:
     try:
-        highlight_file(filename, **vars(args))
+        highlight_file(filename, **kwargs)
     except (IOError, OSError) as e:
         print(error_style, e, reset_style)
+
+if not args.files:
+    highlight_text(sys.stdin.read(), **kwargs)
 
