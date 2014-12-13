@@ -1,0 +1,14 @@
+from __future__ import print_function
+
+import sys
+
+
+filenames = sys.argv[1:]
+
+for filename in filenames:
+    try:
+        print(open(filename).read())
+    except (IOError, OSError) as e:
+        print(e)
+    print()
+
