@@ -3,6 +3,20 @@ from __future__ import print_function
 import sys
 import argparse
 import errno
+import functools
+
+# set default separator
+print = functools.partial(print, sep='')
+
+try:
+    import magic
+    magic = magic.Magic(mime_encoding=True)
+    def is_binary(blob):
+        return (magic.from_buffer(blob) == 'binary')
+
+except ImportError:
+    def is_binary(blob):
+        return False
 
 import pygments
 from pygments import lexers, formatters, console
@@ -15,9 +29,15 @@ default_formatter = formatters.TerminalFormatter()
 filename_style = console.codes['yellow'] + console.codes['underline']
 number_style = console.codes['standout'] #italics
 error_style = console.codes['red']
+binary_style = console.codes['brown']
 reset_style = console.codes['reset']
 
 filename_format = '{}==> {{}} <=={}'.format(filename_style, reset_style)
+
+class BinaryFileException(Exception):
+    def __init__(self, text):
+        self.text = text
+
 
 def try_lexer(function, *args, **kwargs):
     try:
@@ -26,7 +46,7 @@ def try_lexer(function, *args, **kwargs):
         return None
 
 def highlight_file(filename, **kwargs):
-    with open(filename) as f:
+    with open(filename, 'rb') as f:
         text = f.read()
 
     lexer = try_lexer(lexers.get_lexer_for_filename, filename)
@@ -42,52 +62,59 @@ def highlight_stdin(**kwargs):
     return highlight_text(sys.stdin.read(), **kwargs)
 
 def highlight(text, lexer, formatter, **kwargs):
+    if is_binary(text):
+        raise BinaryFileException(text)
     if lexer is None:
         return text
     return pygments.highlight(text, lexer, formatter)
 
 
-## main
+def main(files, **kwargs):
+  multiple = len(files) > 1
+  for filename in files:
+      if filename == '-':
+          if multiple:
+              print(filename_format.format('standard input'))
+          highlight_stdin(**kwargs)
+          continue
+
+      if multiple:
+          print(filename_format.format(filename))
+
+      try:
+          highlighted = highlight_file(filename, **kwargs)
+      except (IOError, OSError) as e:
+          print(error_style, e, reset_style)
+          continue
+      except BinaryFileException as e:
+          print(binary_style, '[Binary file]', reset_style)
+          continue
+
+      try:
+          if args.number_lines:
+              highlighted = highlighted.splitlines()
+              columns = max(len(str(len(highlighted))), 6)
+              number_format = '{}{{:>{}}}{}'.format(number_style, columns, reset_style)
+              for lineno, line in enumerate(highlighted, 1):
+                  print(number_format.format(lineno), '\t', line)
+
+          else:
+              print(highlighted)
+      except IOError as e:
+          if e.errno == errno.EPIPE:
+              break
+          raise
+
+  if not args.files:
+      highlight_stdin(**kwargs)
 
 parser = argparse.ArgumentParser(description="Coloured cat")
 parser.add_argument('-n', action='store_true', help='number lines of output', dest='number_lines')
 parser.add_argument('files', nargs='*')
 
 args = parser.parse_args()
-kwargs = vars(args)
-multiple = len(args.files) > 1
-
-for filename in args.files:
-    if filename == '-':
-        if multiple:
-            print(filename_format.format('standard input'))
-        highlight_stdin(**kwargs)
-        continue
-
-    if multiple:
-        print(filename_format.format(filename))
-
-    try:
-        highlighted = highlight_file(filename, **kwargs)
-    except (IOError, OSError) as e:
-        print(error_style, e, reset_style)
-        continue
-
-    try:
-        if args.number_lines:
-            highlighted = highlighted.splitlines()
-            columns = max(len(str(len(highlighted))), 6)
-            number_format = '{}{{:>{}}}{}'.format(number_style, columns, reset_style)
-            for lineno, line in enumerate(highlighted, 1):
-                print(number_format.format(lineno), '\t', line)
-
-        else:
-            print(highlighted)
-    except IOError as e:
-        if e.errno == errno.EPIPE:
-            break
-        raise
-
-if not args.files:
-    highlight_stdin(**kwargs)
+try:
+    main(**vars(args))
+except KeyboardInterrupt:
+    pass
 
