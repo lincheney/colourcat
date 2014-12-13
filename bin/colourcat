@@ -83,32 +83,30 @@ def print_buffer(buffer):
             sys.exit()
         raise
 
-def print_highlighted(text, lexer, number_lines, highlight_ws, **kwargs):
+def get_highlighted_lines(text, lexer):
     tokens = pygments.lex(text, lexer)
-    blank_line = '\n'
+    whitespace = ''
+    for newline, g in itertools.groupby(tokens, lambda x: '\n' in x[1]):
+        if newline:
+            whitespace = ''.join(i[1] for i in g)[1:]
+        else:
+            lines = whitespace + pygments.format(g, default_formatter)
+            for line in lines.split('\n'):
+                yield line
 
+def print_highlighted(text, lexer, number_lines, highlight_ws, **kwargs):
     if number_lines:
         lineno = 1
         columns = max(len(str(text.count('\n'))) + 1, 6)
-        number_format = '{}{{:>{}}}{}|'.format(number_style, columns, reset_style)
-        blank_line = number_format + '\n'
+        number_format = '{}{{:>{}}}{}|\t'.format(number_style, columns, reset_style)
 
     try:
-        for newline, g in itertools.groupby(tokens, lambda x: x[1] == '\n'):
-            if newline:
-                lines = len(list(g))
-                if number_lines:
-                    print(''.join(blank_line.format(i) for i in range(lineno+1, lineno+lines)), end='')
-                    lineno += lines
-                else:
-                    print(blank_line*(lines-1), end='')
-                continue
-
-            line = pygments.format(g, default_formatter)
+        for lineno, line in enumerate(get_highlighted_lines(text, lexer), 1):
             if line.endswith(reset_style):
                 line = line[:-len(reset_style)]
+
             if number_lines:
-                print(number_format.format(lineno), '\t', end='')
+                print(number_format.format(lineno), end='')
             if highlight_ws:
                 line = re.sub(r'(\s*)$', whitespace_style + r'\1', line)
             print(line, reset_style)
