@@ -2,12 +2,40 @@ from __future__ import print_function
 
 import sys
 
+import pygments
+from pygments import lexers, formatters, console
+
+# default formatter and lexer
+default_formatter = formatters.TerminalFormatter()
+default_lexer = lexers.TextLexer()
+
+
+def try_lexer(function, *args, **kwargs):
+    try:
+        return function(*args, **kwargs)
+    except pygments.util.ClassNotFound:
+        return None
+
+def highlight_file(filename):
+    with open(filename) as f:
+        text = f.read()
+
+    lexer = try_lexer(lexers.get_lexer_for_filename, filename)
+    lexer = lexer or try_lexer(lexers.guess_lexer, text)
+    lexer = lexer or default_lexer
+
+    highlight(text, lexer, default_formatter)
+
+def highlight(text, lexer, formatter):
+    highlighted = pygments.highlight(text, lexer, formatter)
+    print(highlighted)
+
 
 filenames = sys.argv[1:]
 
 for filename in filenames:
     try:
-        print(open(filename).read())
+        highlight_file(filename)
     except (IOError, OSError) as e:
         print(e)
     print()
