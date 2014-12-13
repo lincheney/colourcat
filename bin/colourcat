@@ -64,49 +64,49 @@ def highlight_stdin(**kwargs):
 def highlight(text, lexer, formatter, **kwargs):
     if is_binary(text):
         raise BinaryFileException(text)
-    if lexer is None:
-        return text
     return pygments.highlight(text, lexer, formatter)
 
 
 def main(files, **kwargs):
-  multiple = len(files) > 1
-  for filename in files:
-      if filename == '-':
-          if multiple:
-              print(filename_format.format('standard input'))
-          highlight_stdin(**kwargs)
-          continue
+    if not files:
+        files.append('-')
 
-      if multiple:
-          print(filename_format.format(filename))
+    multiple = len(files) > 1
+    for filename in files:
+        if filename == '-':
+            printed_filename = 'standard input'
+        else:
+            printed_filename = filename
 
-      try:
-          highlighted = highlight_file(filename, **kwargs)
-      except (IOError, OSError) as e:
-          print(error_style, e, reset_style)
-          continue
-      except BinaryFileException as e:
-          print(binary_style, '[Binary file]', reset_style)
-          continue
+        if multiple:
+            print(filename_format.format(printed_filename))
 
-      try:
-          if args.number_lines:
-              highlighted = highlighted.splitlines()
-              columns = max(len(str(len(highlighted))), 6)
-              number_format = '{}{{:>{}}}{}'.format(number_style, columns, reset_style)
-              for lineno, line in enumerate(highlighted, 1):
-                  print(number_format.format(lineno), '\t', line)
+        try:
+            if filename == '-':
+                highlighted = highlight_stdin(**kwargs)
+            else:
+                highlighted = highlight_file(filename, **kwargs)
+        except (IOError, OSError) as e:
+            print(error_style, e, reset_style)
+            continue
+        except BinaryFileException as e:
+            print(binary_style, '[Binary file]', reset_style)
+            continue
 
-          else:
-              print(highlighted)
-      except IOError as e:
-          if e.errno == errno.EPIPE:
-              break
-          raise
+        try:
+            if args.number_lines:
+                highlighted = highlighted.splitlines()
+                columns = max(len(str(len(highlighted))), 6)
+                number_format = '{}{{:>{}}}{}'.format(number_style, columns, reset_style)
+                for lineno, line in enumerate(highlighted, 1):
+                    print(number_format.format(lineno), '\t', line)
 
-  if not args.files:
-      highlight_stdin(**kwargs)
+            else:
+                print(highlighted)
+        except IOError as e:
+            if e.errno == errno.EPIPE:
+                break
+            raise
 
 parser = argparse.ArgumentParser(description="Coloured cat")
 parser.add_argument('-n', action='store_true', help='number lines of output', dest='number_lines')
