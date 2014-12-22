@@ -7,7 +7,7 @@ setup(
     url = 'https://github.com/lincheney/colourcat',
     author = 'Cheney Lin',
     author_email = 'lincheney@gmail.com',
-    packages = ['colourcat'],
+#    packages = ['colourcat'],
     scripts = ['bin/colourcat'],
     install_requires = ['pygments', 'python-magic'],
 )

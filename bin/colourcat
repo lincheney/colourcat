@@ -85,14 +85,16 @@ def print_buffer(buffer):
 
 def get_highlighted_lines(text, lexer):
     tokens = pygments.lex(text, lexer)
-    whitespace = ''
+    lines = ''
     for newline, g in itertools.groupby(tokens, lambda x: '\n' in x[1]):
         if newline:
-            whitespace = ''.join(i[1] for i in g)[1:]
-        else:
-            lines = whitespace + pygments.format(g, default_formatter)
+            first, _, whitespace = ''.join(i[1] for i in g).partition('\n')
+            lines += first
             for line in lines.split('\n'):
                 yield line
+            lines = whitespace
+        else:
+            lines += pygments.format(g, default_formatter)
 
 def print_highlighted(text, lexer, number_lines, highlight_ws, **kwargs):
     if number_lines:
